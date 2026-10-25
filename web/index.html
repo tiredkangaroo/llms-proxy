@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Completions API — Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Login -->
+  <div id="login-view" class="view hidden">
+    <form id="login-form" class="login-card">
+      <h1>Completions API</h1>
+      <p class="muted">Enter the master password printed in the server logs on startup.</p>
+      <input type="password" id="login-password" placeholder="Master password" autocomplete="current-password" required autofocus>
+      <button type="submit" class="primary full">Sign in</button>
+      <div id="login-error" class="error hidden"></div>
+    </form>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="app-view" class="view hidden">
+    <header>
+      <div class="brand">
+        <h1>Completions API</h1>
+        <p class="muted">Provider failover gateway — first success wins</p>
+      </div>
+      <div class="header-actions">
+        <button id="add-provider-btn" class="primary">+ Add provider</button>
+        <button id="logout-btn">Log out</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="stats" id="stat-cards"></section>
+
+      <section>
+        <h2>Providers <span class="muted">— tried in order, top to bottom</span></h2>
+        <div id="providers-list" class="providers"></div>
+        <div id="no-providers" class="empty hidden">
+          No providers yet. Click <strong>“+ Add provider”</strong> to get started.
+        </div>
+      </section>
+
+      <section class="grid-2">
+        <div class="panel">
+          <h2>Provider usage</h2>
+          <table>
+            <thead><tr><th>Provider</th><th>Req</th><th>OK</th><th>Fail</th><th>Tokens</th><th>Avg</th><th>Last</th></tr></thead>
+            <tbody id="usage-table"></tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <h2>Recent requests</h2>
+          <table>
+            <thead><tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th><th>Lat</th><th>Tok</th><th>Error</th></tr></thead>
+            <tbody id="recent-table"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Provider modal -->
+  <div id="modal-backdrop" class="hidden">
+    <div class="modal">
+      <h2 id="modal-title">Add provider</h2>
+      <form id="provider-form">
+        <input type="hidden" id="p-id">
+
+        <label>Preset
+          <select id="p-preset">
+            <option value="">— Custom —</option>
+            <option value="hackclub">Hack Club AI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="gemini">Gemini (Google)</option>
+          </select>
+        </label>
+
+        <label>Name
+          <input type="text" id="p-name" required placeholder="e.g. Primary GPT-4o">
+        </label>
+
+        <label>Type
+          <select id="p-type">
+            <option value="openai">OpenAI-compatible</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="gemini">Google Gemini</option>
+          </select>
+        </label>
+
+        <label>Base URL
+          <input type="text" id="p-base-url" placeholder="https://...">
+        </label>
+
+        <label>Model
+          <input type="text" id="p-model" placeholder="model id">
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" id="p-wildcard">
+          Wildcard — accept any model (for aggregators like Hack Club AI / OpenRouter)
+        </label>
+
+        <label>API key
+          <input type="password" id="p-api-key" placeholder="sk-...">
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" id="p-enabled" checked>
+          Enabled
+        </label>
+
+        <div class="modal-actions">
+          <button type="button" id="modal-cancel">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

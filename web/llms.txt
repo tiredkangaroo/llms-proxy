@@ -1,0 +1,145 @@
+# Completions API
+
+> An OpenAI-compatible completions endpoint with automatic provider failover. Send a chat-completion request; the gateway tries each configured upstream provider in order and returns the first successful response.
+
+## Base URL
+
+The gateway speaks the OpenAI Chat Completions protocol. Point any OpenAI SDK or plain HTTP client at the server root, e.g. `http://localhost:8080/v1`.
+
+## Authentication
+
+The completions endpoint requires no API key from the caller. Upstream provider API keys are configured on the server side and are never exposed to callers.
+
+## Endpoints
+
+- [Create chat completion](/v1/chat/completions): `POST /v1/chat/completions` — generate a chat completion. Supports streaming and non-streaming.
+- [List models](/v1/models): `GET /v1/models` — list the models of all enabled providers.
+
+## Chat Completions request
+
+`POST /v1/chat/completions` accepts a JSON body in the OpenAI format:
+
+```json
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Hello!"}
+  ],
+  "stream": false,
+  "temperature": 0.7,
+  "max_tokens": 256,
+  "top_p": 1.0
+}
+```
+
+### Request fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `messages` | array | yes | Conversation history. Each item is `{"role": "user" \| "assistant" \| "system", "content": "..."}`. |
+| `model` | string | no | Requested model id. Forwarded unchanged to wildcard providers (those with no fixed model). |
+| `stream` | boolean | no | When `true`, the response is streamed as Server-Sent Events (default `false`). |
+| `temperature` | number | no | Sampling temperature, typically 0–2. |
+| `max_tokens` | integer | no | Maximum number of tokens to generate. |
+| `max_completion_tokens` | integer | no | Alias for `max_tokens`. |
+| `top_p` | number | no | Nucleus sampling probability. |
+
+## Wildcard providers (aggregators)
+
+A provider configured with **no fixed model** is a *wildcard*: whatever `model` you send in the request is forwarded to it unchanged. This is how you front an aggregator that exposes many models with a single provider entry, for example:
+
+- **Hack Club AI** — base URL `https://ai.hackclub.com/proxy/v1`, type `openai`, no model
+- **OpenRouter** — base URL `https://openrouter.ai/api/v1`, type `openai`, no model
+
+With one wildcard entry you can call any model the aggregator supports (e.g. `openai/gpt-4o`, `anthropic/claude-sonnet-4-5`, `google/gemini-2.5-flash`) without adding a provider per model. In `GET /v1/models`, a wildcard provider is listed with the id `*`.
+
+## Chat Completions response
+
+Non-streaming responses are returned as a single JSON object:
+
+```json
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "created": 1720000000,
+  "model": "gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "Hi! How can I help?"},
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {"prompt_tokens": 12, "completion_tokens": 6, "total_tokens": 18}
+}
+```
+
+## Streaming
+
+When `"stream": true`, the response is `text/event-stream`. Each `data:` event carries one `chat.completion.chunk` object with a `delta`, and the stream ends with `data: [DONE]`:
+
+```
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1720000000,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1720000000,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]}
+
+data: [DONE]
+```
+
+## Failover behavior
+
+The gateway maintains an ordered list of providers. For each request it attempts the providers in order:
+
+- The first provider that returns a successful (2xx) response wins; that response is returned to the caller.
+- If a provider fails (network error, timeout, or non-2xx status), the gateway records the failure and tries the next provider.
+- If every enabled provider fails, the gateway returns HTTP 502.
+
+For non-streaming requests the gateway fails over fully. For streaming requests it fails over only if a provider fails before any data is sent; once a provider begins streaming, it is committed.
+
+## Error responses
+
+Errors use the OpenAI error shape:
+
+```json
+{"error": {"message": "all providers failed: ...", "type": "upstream_error", "code": 502}}
+```
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Success. |
+| 400 | Invalid request body (e.g. missing `messages`). |
+| 502 | All providers failed. |
+| 503 | No enabled providers configured. |
+
+## Examples
+
+### curl
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello!"}]}'
+```
+
+### OpenAI Python SDK
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="not-used")
+
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(resp.choices[0].message.content)
+```
+
+### Streaming (curl)
+
+```bash
+curl -N http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello!"}],"stream":true}'
+```
