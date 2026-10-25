@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"sort"
 	"sync"
 	"time"
 )
@@ -25,6 +26,16 @@ type Provider struct {
 	Model   string       `json:"model"`
 	APIKey  string       `json:"api_key"`
 	Enabled bool         `json:"enabled"`
+}
+
+// APIKey authenticates callers of the completions API.
+type APIKey struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Key          string `json:"key"`
+	CreatedUnix  int64  `json:"created_unix"`
+	LastUsedUnix int64  `json:"last_used_unix"`
+	Requests     int64  `json:"requests"`
 }
 
 // UsageStats aggregates per-provider request metrics.
@@ -57,6 +68,7 @@ type Store struct {
 	mu             sync.RWMutex
 	masterPassword string
 	providers      []*Provider
+	apiKeys        map[string]*APIKey
 	usage          map[string]*UsageStats
 	recent         []RequestRecord
 	sessions       map[string]time.Time
@@ -66,6 +78,7 @@ func newStore(masterPassword string) *Store {
 	return &Store{
 		masterPassword: masterPassword,
 		providers:      []*Provider{},
+		apiKeys:        map[string]*APIKey{},
 		usage:          map[string]*UsageStats{},
 		recent:         []RequestRecord{},
 		sessions:       map[string]time.Time{},
@@ -247,6 +260,65 @@ func (s *Store) cleanupSessions() {
 			delete(s.sessions, k)
 		}
 	}
+}
+
+func (s *Store) addAPIKey(name, key string) APIKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ak := APIKey{
+		ID:          newID(),
+		Name:        name,
+		Key:         key,
+		CreatedUnix: time.Now().Unix(),
+	}
+	s.apiKeys[key] = &ak
+	return ak
+}
+
+func (s *Store) createAPIKey(name string) APIKey {
+	return s.addAPIKey(name, "sk-gw-"+newID())
+}
+
+func (s *Store) listAPIKeys() []APIKey {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]APIKey, 0, len(s.apiKeys))
+	for _, k := range s.apiKeys {
+		out = append(out, *k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedUnix < out[j].CreatedUnix })
+	return out
+}
+
+func (s *Store) validateAPIKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.apiKeys[key]
+	return ok
+}
+
+func (s *Store) recordAPIKeyUse(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ak, ok := s.apiKeys[key]; ok {
+		ak.Requests++
+		ak.LastUsedUnix = time.Now().Unix()
+	}
+}
+
+func (s *Store) revokeAPIKey(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, ak := range s.apiKeys {
+		if ak.ID == id {
+			delete(s.apiKeys, key)
+			return true
+		}
+	}
+	return false
 }
 
 func newID() string {

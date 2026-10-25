@@ -22,13 +22,13 @@ const (
 
 // incomingRequest is the normalized OpenAI-compatible request we receive.
 type incomingRequest struct {
-	Model               string          `json:"model"`
-	Messages            []incomingMsg   `json:"messages"`
-	Stream              bool            `json:"stream"`
-	Temperature         *float64        `json:"temperature"`
-	TopP                *float64        `json:"top_p"`
-	MaxTokens           *int            `json:"max_tokens"`
-	MaxCompletionTokens *int            `json:"max_completion_tokens"`
+	Model               string        `json:"model"`
+	Messages            []incomingMsg `json:"messages"`
+	Stream              bool          `json:"stream"`
+	Temperature         *float64      `json:"temperature"`
+	TopP                *float64      `json:"top_p"`
+	MaxTokens           *int          `json:"max_tokens"`
+	MaxCompletionTokens *int          `json:"max_completion_tokens"`
 	raw                 map[string]any
 }
 
@@ -202,9 +202,9 @@ func (u *upstream) openAIStream(ctx context.Context, p Provider, req *incomingRe
 // ---------- Anthropic ----------
 
 type anthropicMessage struct {
-	ID         string `json:"id"`
-	Role       string `json:"role"`
-	Content    []struct {
+	ID      string `json:"id"`
+	Role    string `json:"role"`
+	Content []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"content"`

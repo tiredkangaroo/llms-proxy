@@ -8,7 +8,13 @@ The gateway speaks the OpenAI Chat Completions protocol. Point any OpenAI SDK or
 
 ## Authentication
 
-The completions endpoint requires no API key from the caller. Upstream provider API keys are configured on the server side and are never exposed to callers.
+Every request to the completions API must include an API key, passed as a Bearer token (or the `x-api-key` header):
+
+```text
+Authorization: Bearer sk-gw-...
+```
+
+API keys are created and revoked in the admin dashboard. Upstream provider API keys are configured on the server side and are never exposed to callers.
 
 ## Endpoints
 
@@ -109,6 +115,7 @@ Errors use the OpenAI error shape:
 |--------|---------|
 | 200 | Success. |
 | 400 | Invalid request body (e.g. missing `messages`). |
+| 401 | Missing or invalid API key. |
 | 502 | All providers failed. |
 | 503 | No enabled providers configured. |
 
@@ -118,6 +125,7 @@ Errors use the OpenAI error shape:
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello!"}]}'
 ```
@@ -127,7 +135,7 @@ curl http://localhost:8080/v1/chat/completions \
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8080/v1", api_key="not-used")
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="sk-gw-...")
 
 resp = client.chat.completions.create(
     model="gpt-4o-mini",
@@ -140,6 +148,7 @@ print(resp.choices[0].message.content)
 
 ```bash
 curl -N http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello!"}],"stream":true}'
 ```

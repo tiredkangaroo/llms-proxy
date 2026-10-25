@@ -29,6 +29,14 @@ func main() {
 	}
 
 	st := newStore(master)
+
+	initialKey := strings.TrimSpace(os.Getenv("API_KEY"))
+	if initialKey == "" {
+		initialKey = st.createAPIKey("default").Key
+	} else {
+		st.addAPIKey("default", initialKey)
+	}
+
 	srv := &server{
 		store:         st,
 		upstream:      newUpstream(),
@@ -51,7 +59,8 @@ func main() {
 	log.Printf("  API docs (llms.txt): GET  http://localhost:%s/llms.txt", port)
 	log.Printf("")
 	log.Printf("  MASTER PASSWORD:    %s", master)
-	log.Printf("  (shown only once at startup; store it somewhere safe)")
+	log.Printf("  API key:            %s", initialKey)
+	log.Printf("  (master password shown once; API keys are managed in the dashboard)")
 	log.Printf("==============================================================")
 	log.Printf("")
 

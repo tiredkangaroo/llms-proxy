@@ -34,6 +34,18 @@
     <main>
       <section class="stats" id="stat-cards"></section>
 
+      <section class="panel">
+        <h2>API keys <span class="muted">— required to call the completions API</span></h2>
+        <div class="key-create">
+          <input type="text" id="key-name" placeholder="Key name (optional)">
+          <button id="create-key-btn" class="primary">Create key</button>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th>Requests</th><th></th></tr></thead>
+          <tbody id="keys-table"></tbody>
+        </table>
+      </section>
+
       <section>
         <h2>Providers <span class="muted">— tried in order, top to bottom</span></h2>
         <div id="providers-list" class="providers"></div>

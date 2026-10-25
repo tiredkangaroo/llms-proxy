@@ -3,7 +3,8 @@
 A single-binary, OpenAI-compatible **completions gateway** with automatic provider
 **failover**. It fronts a list of LLM providers and tries them **in order** — the
 first one that succeeds wins, otherwise it moves down the list. A bundled web UI
-lets you add/remove/reorder providers and inspect live usage.
+lets you add/remove/reorder providers, issue/revoke **API keys**, and inspect
+live usage.
 
 All state (master password, provider configs, API keys, usage) is kept **in
 memory** and is lost on restart.
@@ -35,19 +36,22 @@ go build -o completions-api .
 ./completions-api
 ```
 
-On startup the server logs a **master password** — it is printed **once** and is
-required to open the admin dashboard.
+On startup the server logs a **master password** (printed **once**, required to
+open the admin dashboard) and an initial **API key** (required to call the
+completions API).
 
 ```
 ==============================================================
   Completions API gateway
 
-  Admin dashboard:    http://localhost:8080/
-  Completions API:    POST http://localhost:8080/v1/chat/completions
-  Models list:        GET  http://localhost:8080/v1/models
+  Admin dashboard:     http://localhost:8080/
+  Completions API:     POST http://localhost:8080/v1/chat/completions
+  Models list:         GET  http://localhost:8080/v1/models
+  API docs (llms.txt): GET  http://localhost:8080/llms.txt
 
-  MASTER PASSWORD:    xxxx-yyyy-zzzz-wwww
-  (shown only once at startup; store it somewhere safe)
+  MASTER PASSWORD:     xxxx-yyyy-zzzz-wwww
+  API key:             sk-gw-xxxx...
+  (master password shown once; API keys are managed in the dashboard)
 ==============================================================
 ```
 
@@ -58,7 +62,7 @@ docker build -t completions-api .
 docker run -p 8080:8080 completions-api
 ```
 
-The master password appears in the container logs:
+The master password and initial API key appear in the container logs:
 
 ```bash
 docker logs <container-id>
@@ -68,17 +72,20 @@ docker logs <container-id>
 
 Open `http://localhost:8080/`, sign in with the master password, then:
 
-1. Click **+ Add provider** and pick a preset (or enter a custom base URL).
-2. Paste the API key. For aggregators (Hack Club AI, OpenRouter) leave **Model** blank (or check **Wildcard**) so any model is forwarded; for single-model providers set the model id.
-3. Reorder providers with the ▲ / ▼ arrows — **order = failover priority**.
-4. Use **Test** to verify a provider works, and toggle providers on/off.
+1. Create an **API key** (required to call the API).
+2. Click **+ Add provider** and pick a preset (or enter a custom base URL).
+3. Paste the provider API key. For aggregators (Hack Club AI, OpenRouter) leave **Model** blank (or check **Wildcard**) so any model is forwarded; for single-model providers set the model id.
+4. Reorder providers with the ▲ / ▼ arrows — **order = failover priority**.
+5. Use **Test** to verify a provider works, and toggle providers on/off.
 
 ## Use the API
 
-It speaks the OpenAI Chat Completions protocol, so point any OpenAI SDK at it:
+It speaks the OpenAI Chat Completions protocol, so point any OpenAI SDK at it.
+Every request must include an API key (a `Bearer` token or `x-api-key` header):
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello!"}]}'
 ```
@@ -86,7 +93,7 @@ curl http://localhost:8080/v1/chat/completions \
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8080/v1", api_key="not-used")
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="sk-gw-...")
 resp = client.chat.completions.create(
     model="gpt-4o-mini",
     messages=[{"role": "user", "content": "Hello!"}],
@@ -116,6 +123,7 @@ Streaming is supported too (`stream=True`).
 |----------|---------|---------|
 | `PORT` | `8080` | HTTP listen port |
 | `MASTER_PASSWORD` | random | Override the generated master password |
+| `API_KEY` | random | Override the initial API key seeded at startup |
 | `REQUEST_TIMEOUT_SECONDS` | `120` | Non-streaming upstream timeout |
 | `STREAM_TIMEOUT_SECONDS` | `300` | Streaming upstream timeout |
 | `SESSION_TTL_HOURS` | `24` | Admin session lifetime |

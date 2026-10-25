@@ -41,6 +41,11 @@ func (s *server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/providers/{id}", s.requireAdmin(s.handleDeleteProvider))
 	mux.HandleFunc("POST /api/providers/{id}/test", s.requireAdmin(s.handleTestProvider))
 
+	// Admin: API keys.
+	mux.HandleFunc("GET /api/keys", s.requireAdmin(s.handleListKeys))
+	mux.HandleFunc("POST /api/keys", s.requireAdmin(s.handleCreateKey))
+	mux.HandleFunc("DELETE /api/keys/{id}", s.requireAdmin(s.handleRevokeKey))
+
 	// Admin: usage.
 	mux.HandleFunc("GET /api/usage", s.requireAdmin(s.handleUsage))
 
@@ -61,6 +66,13 @@ func (s *server) startSessionCleanup() {
 
 func (s *server) handleCompletions(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
+
+	key := s.apiKeyFromRequest(r)
+	if !s.store.validateAPIKey(key) {
+		writeOpenAIError(w, http.StatusUnauthorized, "invalid or missing API key")
+		return
+	}
+	s.store.recordAPIKeyUse(key)
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	if err != nil {
@@ -156,6 +168,11 @@ func (s *server) streamCompletions(w http.ResponseWriter, r *http.Request, req *
 
 func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
+	key := s.apiKeyFromRequest(r)
+	if !s.store.validateAPIKey(key) {
+		writeOpenAIError(w, http.StatusUnauthorized, "invalid or missing API key")
+		return
+	}
 	providers := s.store.enabledProviders()
 	data := []map[string]any{}
 	for _, p := range providers {
@@ -344,6 +361,28 @@ func (s *server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"usage": usage, "recent": recent})
 }
 
+func (s *server) handleListKeys(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"keys": s.store.listAPIKeys()})
+}
+
+func (s *server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	key := s.store.createAPIKey(strings.TrimSpace(req.Name))
+	writeJSON(w, http.StatusCreated, key)
+}
+
+func (s *server) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !s.store.revokeAPIKey(id) {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "key not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // ---------- Admin: static site ----------
 
 func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
@@ -392,6 +431,17 @@ func (s *server) authorized(r *http.Request) bool {
 		return s.store.validateSession(strings.TrimPrefix(auth, "Bearer "))
 	}
 	return false
+}
+
+func (s *server) apiKeyFromRequest(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	if k := r.Header.Get("x-api-key"); k != "" {
+		return strings.TrimSpace(k)
+	}
+	return ""
 }
 
 func validateProvider(p *Provider) error {
@@ -452,7 +502,7 @@ func writeOpenAIError(w http.ResponseWriter, status int, msg string) {
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
 }
 
 func httpFlusher(w http.ResponseWriter) http.Flusher {

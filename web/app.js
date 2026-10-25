@@ -74,7 +74,7 @@ $("#logout-btn").addEventListener("click", async () => {
 
 // ---------- Data loading ----------
 async function loadAll() {
-  await Promise.all([loadProviders(), loadUsage()]);
+  await Promise.all([loadProviders(), loadUsage(), loadKeys()]);
 }
 
 async function loadProviders() {
@@ -89,6 +89,67 @@ async function loadUsage() {
   const data = await res.json();
   renderUsage(data.usage || {}, data.recent || []);
 }
+
+async function loadKeys() {
+  const res = await api("/api/keys");
+  const data = await res.json();
+  renderKeys(data.keys || []);
+}
+
+function renderKeys(keys) {
+  const tb = $("#keys-table");
+  tb.innerHTML = "";
+  if (keys.length === 0) {
+    tb.innerHTML = `<tr><td colspan="6" class="muted">No API keys yet — create one below</td></tr>`;
+    return;
+  }
+  keys.forEach((k) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${esc(k.name || "—")}</td>
+      <td><code class="key-value">${esc(k.key)}</code> <button class="icon" data-copy="${esc(k.key)}" title="Copy">⧉</button></td>
+      <td>${esc(new Date(k.created_unix * 1000).toLocaleString())}</td>
+      <td>${k.last_used_unix ? esc(timeAgo(k.last_used_unix)) : "—"}</td>
+      <td>${k.requests}</td>
+      <td><button class="danger" data-revoke="${esc(k.id)}">Revoke</button></td>
+    `;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll("[data-copy]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(b.dataset.copy);
+        b.textContent = "✓";
+        setTimeout(() => (b.textContent = "⧉"), 1200);
+      } catch {}
+    });
+  });
+  tb.querySelectorAll("[data-revoke]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("Revoke this API key? It will stop working immediately.")) return;
+      await api(`/api/keys/${b.dataset.revoke}`, { method: "DELETE" });
+      await loadKeys();
+    });
+  });
+}
+
+$("#create-key-btn").addEventListener("click", async () => {
+  const name = $("#key-name").value.trim();
+  const res = await api("/api/keys", { method: "POST", body: JSON.stringify({ name }) });
+  if (res.ok) {
+    $("#key-name").value = "";
+    await loadKeys();
+  } else {
+    alert("Failed to create key");
+  }
+});
+
+$("#key-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    $("#create-key-btn").click();
+  }
+});
 
 // ---------- Providers rendering ----------
 function renderProviders() {
@@ -342,7 +403,10 @@ async function init() {
 }
 
 setInterval(() => {
-  if (!$("#app-view").classList.contains("hidden")) loadUsage();
+  if (!$("#app-view").classList.contains("hidden")) {
+    loadUsage();
+    loadKeys();
+  }
 }, 5000);
 
 init();

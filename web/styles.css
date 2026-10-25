@@ -122,6 +122,18 @@ tbody tr:last-child td { border-bottom: none; }
 .status.success { color: var(--ok); }
 .status.error { color: var(--err); }
 
+.key-create { display: flex; gap: 8px; margin-bottom: 14px; }
+.key-create input {
+  flex: 1; background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 9px 11px; color: var(--text); font-size: 0.95rem;
+}
+.key-create input:focus { outline: none; border-color: var(--accent); }
+.key-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem; background: var(--bg-3); padding: 2px 6px;
+  border-radius: 4px; word-break: break-all;
+}
+
 /* Modal */
 #modal-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6);
